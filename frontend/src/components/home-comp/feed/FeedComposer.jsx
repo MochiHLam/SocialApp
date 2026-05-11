@@ -39,8 +39,12 @@ export default function FeedComposer({
             className="w-full resize-none rounded-xl border border-[#e4e6eb] bg-[#f0f2f5] px-4 py-3 text-sm text-[#1c1e21] outline-none placeholder:text-[#8a8d91]"
           />
           {composerImageUrl && (
-            <div className="mt-2 overflow-hidden rounded-lg border border-[#e4e6eb]">
-              <img src={composerImageUrl} alt="Post attachment preview" className="h-40 w-full object-cover" />
+            <div className="mt-2 overflow-hidden rounded-lg border border-[#e4e6eb] bg-[#f0f2f5]">
+              <img
+                src={composerImageUrl}
+                alt="Post attachment preview"
+                className="max-h-60 w-full object-contain"
+              />
             </div>
           )}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#f0f2f5] pt-3">

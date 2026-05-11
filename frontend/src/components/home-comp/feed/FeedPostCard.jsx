@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 
 import { formatPostCreatedAtDisplay } from "../../../lib/postDisplayTime.js";
 
@@ -53,6 +54,36 @@ function openAuthorProfile(onOpenProfile, authorId, displayName, avatarUrl) {
   onOpenProfile(payload);
 }
 
+function CommentMenuPortal({ anchorEl, onClose, children }) {
+  const [pos, setPos] = useState(null);
+
+  useEffect(() => {
+    if (!anchorEl) return;
+    const rect = anchorEl.getBoundingClientRect();
+    setPos({
+      top: rect.bottom + window.scrollY + 4,
+      right: window.innerWidth - rect.right - window.scrollX,
+    });
+  }, [anchorEl]);
+
+  if (!pos) return null;
+
+  return createPortal(
+    <>
+      {/* backdrop to close on outside click */}
+      <div className="fixed inset-0 z-[9998]" onClick={onClose} />
+      <div
+        style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
+        className="min-w-[130px] rounded-md border border-[#e4e6eb] bg-white py-1 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </>,
+    document.body
+  );
+}
+
 function CommentAvatar({ avatarUrl, authorName, sm }) {
   const box = sm ? "h-7 w-7 text-[10px]" : "h-8 w-8 text-xs";
   if (avatarUrl) {
@@ -98,6 +129,7 @@ export default function FeedPostCard({
   const [editingPostCaption, setEditingPostCaption] = useState(post.caption || "");
   const [isSavingPost, setIsSavingPost] = useState(false);
   const [openCommentMenuId, setOpenCommentMenuId] = useState(null);
+  const [commentMenuAnchor, setCommentMenuAnchor] = useState(null);
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState("");
   const [comments, setComments] = useState(() =>
@@ -167,18 +199,10 @@ export default function FeedPostCard({
       commentInputRef.current.scrollHeight > maxHeight ? "auto" : "hidden";
   }, [commentInput]);
 
-  useEffect(() => {
-    if (!openCommentMenuId) return undefined;
-
-    const handleOutsideClick = () => {
-      setOpenCommentMenuId(null);
-    };
-
-    window.addEventListener("click", handleOutsideClick);
-    return () => {
-      window.removeEventListener("click", handleOutsideClick);
-    };
-  }, [openCommentMenuId]);
+  const closeCommentMenu = useCallback(() => {
+    setOpenCommentMenuId(null);
+    setCommentMenuAnchor(null);
+  }, []);
 
   useEffect(() => {
     if (!isPostMenuOpen) return undefined;
@@ -227,7 +251,7 @@ export default function FeedPostCard({
         replies: (c.replies ?? []).filter((r) => r.id !== commentId),
       }));
     });
-    setOpenCommentMenuId(null);
+    closeCommentMenu();
     setEditingCommentId((prevEdit) => {
       if (prevEdit === commentId) {
         setEditingCommentText("");
@@ -240,7 +264,7 @@ export default function FeedPostCard({
   const handleStartEditComment = (comment) => {
     setEditingCommentId(comment.id);
     setEditingCommentText(comment.text);
-    setOpenCommentMenuId(null);
+    closeCommentMenu();
   };
 
   const handleSaveEditComment = async () => {
@@ -449,9 +473,19 @@ export default function FeedPostCard({
               <>
                 <button
                   type="button"
+                  ref={(el) => {
+                    if (openCommentMenuId === comment.id && el && !commentMenuAnchor) {
+                      setCommentMenuAnchor(el);
+                    }
+                  }}
                   onClick={(event) => {
                     event.stopPropagation();
-                    setOpenCommentMenuId((prevId) => (prevId === comment.id ? null : comment.id));
+                    if (openCommentMenuId === comment.id) {
+                      closeCommentMenu();
+                    } else {
+                      setCommentMenuAnchor(event.currentTarget);
+                      setOpenCommentMenuId(comment.id);
+                    }
                   }}
                   className="absolute right-0 bottom-1 flex h-6 w-6 items-center justify-center rounded-full text-[#65676b] transition hover:bg-[#e4e6eb]"
                   aria-label="Open comment menu"
@@ -461,11 +495,8 @@ export default function FeedPostCard({
                   </svg>
                 </button>
 
-                {openCommentMenuId === comment.id && (
-                  <div
-                    onClick={(event) => event.stopPropagation()}
-                    className="absolute right-8 bottom-0 z-10 min-w-[130px] rounded-md border border-[#e4e6eb] bg-white py-1 shadow-lg"
-                  >
+                {openCommentMenuId === comment.id && commentMenuAnchor && (
+                  <CommentMenuPortal anchorEl={commentMenuAnchor} onClose={closeCommentMenu}>
                     <button
                       type="button"
                       onClick={() => handleStartEditComment(comment)}
@@ -480,7 +511,7 @@ export default function FeedPostCard({
                     >
                       Delete comment
                     </button>
-                  </div>
+                  </CommentMenuPortal>
                 )}
               </>
             )}
@@ -535,7 +566,7 @@ export default function FeedPostCard({
     openAuthorProfile(onOpenProfile, post.authorId, post.authorName, post.authorAvatar);
 
   return (
-    <article className="overflow-hidden rounded-lg border border-[#e4e6eb] bg-white shadow-[0_2px_4px_rgba(0,0,0,0.08),0_8px_16px_rgba(0,0,0,0.06)]">
+    <article className="rounded-lg border border-[#e4e6eb] bg-white shadow-[0_2px_4px_rgba(0,0,0,0.08),0_8px_16px_rgba(0,0,0,0.06)]">
       <div className="flex items-center gap-3 p-4">
         <div className="shrink-0">
           {canOpenPostAuthor ? (
@@ -642,7 +673,15 @@ export default function FeedPostCard({
         <p className="px-4 pb-3 whitespace-pre-wrap text-sm text-[#1c1e21]">{post.caption}</p>
       )}
 
-      {post.imageUrl ? <img src={post.imageUrl} alt="Feed post" className="h-auto w-full object-cover" /> : null}
+      {post.imageUrl ? (
+        <div className="bg-[#f0f2f5]">
+          <img
+            src={post.imageUrl}
+            alt="Feed post"
+            className="max-h-96 w-full object-contain"
+          />
+        </div>
+      ) : null}
 
       <div className="flex items-center justify-between border-t border-[#f0f2f5] px-4 py-3 text-xs font-medium text-[#65676b]">
         <span>{totalLikes} likes</span>
@@ -703,7 +742,7 @@ export default function FeedPostCard({
 
       {isCommentOpen && (
         <div className="space-y-3 border-t border-[#f0f2f5] px-4 py-3">
-          <div className="max-h-[300px] space-y-3 overflow-y-auto pr-1">
+          <div className="max-h-[300px] space-y-3 overflow-y-auto overflow-x-visible pr-1">
             {displaySortedComments.map((comment) => (
               <div key={comment.id} className="space-y-2">
                 {renderCommentRow(comment, 0)}
