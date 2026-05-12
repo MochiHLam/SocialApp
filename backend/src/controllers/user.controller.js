@@ -1,5 +1,6 @@
 import {
   getCurrentUserProfile,
+  getUserProfileById,
   searchUsers,
   updateCurrentUserAvatar,
   updateCurrentUserProfile,
@@ -12,6 +13,16 @@ export async function getCurrentUserHandler(req, res) {
   res.json({
     success: true,
     user,
+  });
+}
+
+/** GET /users/:userId */
+export async function getUserProfileHandler(req, res) {
+  const profile = await getUserProfileById(req.user.id, req.params.userId);
+
+  res.json({
+    success: true,
+    user: profile,
   });
 }
 

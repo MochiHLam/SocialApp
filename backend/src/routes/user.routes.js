@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import {
   getCurrentUserHandler,
+  getUserProfileHandler,
   searchUsersHandler,
   updateCurrentUserAvatarHandler,
   updateCurrentUserHandler,
@@ -18,5 +19,6 @@ router.get("/me", requireAuth, asyncHandler(getCurrentUserHandler));
 router.get("/search", requireAuth, asyncHandler(searchUsersHandler));
 router.patch("/me", requireAuth, validateBody(updateProfileSchema), asyncHandler(updateCurrentUserHandler));
 router.post("/me/avatar", requireAuth, avatarUpload.single("avatar"), asyncHandler(updateCurrentUserAvatarHandler));
+router.get("/:userId", requireAuth, asyncHandler(getUserProfileHandler));
 
 export default router;

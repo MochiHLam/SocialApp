@@ -4,6 +4,14 @@ import toast from 'react-hot-toast';
 import { useUpdateProfile } from '../../hooks/useUpdateProfile.js';
 import { useUploadAvatar } from '../../hooks/useUploadAvatar.js';
 import { useAuthStore } from '../../stores/useAuthStore.js';
+import {
+  getUserProfile,
+  createFriendRequest,
+  cancelFriendRequest,
+  acceptFriendRequest,
+  declineFriendRequest,
+  removeFriend,
+} from '../../lib/api.js';
 
 const GENDERS = ['Male', 'Female', 'Other'];
 const MAX_BIO_CHARACTERS = 280;
@@ -350,17 +358,204 @@ export default function ProfileSectionView({ user, viewedProfile, displayName, o
   const [avatarOpen, setAvatarOpen] = useState(false);
   const setAuthUser = useAuthStore((state) => state.setAuthUser);
 
+  // --- Other-user profile state ---
+  const [fetchedProfile, setFetchedProfile] = useState(null);
+  const [relationStatus, setRelationStatus] = useState('none');
+  const [friendRequestId, setFriendRequestId] = useState(null);
+  const [relationshipId, setRelationshipId] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+
   const isOwnProfile =
     !viewedProfile?.id ||
     (user?.id != null && String(viewedProfile.id) === String(user.id));
 
-  const profileUser = isOwnProfile ? user : { ...viewedProfile };
+  const targetUserId = !isOwnProfile ? String(viewedProfile.id) : null;
+
+  // Fetch other user's full profile + relationship on mount / when target changes
+  useEffect(() => {
+    if (!targetUserId) {
+      setFetchedProfile(null);
+      setRelationStatus('none');
+      setFriendRequestId(null);
+      setRelationshipId(null);
+      return;
+    }
+
+    let cancelled = false;
+    async function load() {
+      setProfileLoading(true);
+      try {
+        const data = await getUserProfile({ userId: targetUserId });
+        if (cancelled) return;
+        const u = data?.user;
+        if (u) {
+          setFetchedProfile(u);
+          setRelationStatus(u.relationshipStatus || 'none');
+          setFriendRequestId(u.friendRequestId || null);
+          setRelationshipId(u.relationshipId || null);
+        }
+      } catch {
+        // keep whatever preview data we have
+      } finally {
+        if (!cancelled) setProfileLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [targetUserId]);
+
+  const profileUser = isOwnProfile
+    ? user
+    : fetchedProfile || { ...viewedProfile };
   const currentName = profileUser?.displayName || displayName || 'User';
 
   const handleSaved = (nextUser) => {
     onUserChange?.(nextUser);
     setAuthUser(nextUser);
   };
+
+  // --- Friend action handlers ---
+  const handleAddFriend = async () => {
+    try {
+      setActionBusy(true);
+      const res = await createFriendRequest({ receiverId: targetUserId });
+      const reqId = res?.request?.requestId || res?.request?.id || null;
+      setRelationStatus('requested');
+      setFriendRequestId(reqId);
+      toast.success(`Friend request sent to ${currentName}.`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to send friend request');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!friendRequestId) return;
+    try {
+      setActionBusy(true);
+      await cancelFriendRequest({ requestId: friendRequestId });
+      setRelationStatus('none');
+      setFriendRequestId(null);
+      toast.success('Friend request cancelled.');
+    } catch (err) {
+      toast.error(err.message || 'Failed to cancel friend request');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleAcceptRequest = async () => {
+    if (!friendRequestId) return;
+    try {
+      setActionBusy(true);
+      await acceptFriendRequest({ requestId: friendRequestId });
+      setRelationStatus('friends');
+      setFriendRequestId(null);
+      toast.success('Friend request accepted!');
+    } catch (err) {
+      toast.error(err.message || 'Failed to accept request');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleDeclineRequest = async () => {
+    if (!friendRequestId) return;
+    try {
+      setActionBusy(true);
+      await declineFriendRequest({ requestId: friendRequestId });
+      setRelationStatus('none');
+      setFriendRequestId(null);
+      toast.success('Friend request declined.');
+    } catch (err) {
+      toast.error(err.message || 'Failed to decline request');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleUnfriend = async () => {
+    if (!relationshipId) return;
+    try {
+      setActionBusy(true);
+      await removeFriend({ relationshipId });
+      setRelationStatus('none');
+      setRelationshipId(null);
+      toast.success(`${currentName} removed from friends.`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to remove friend');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  // --- Render action buttons for other user ---
+  function renderFriendActionButtons() {
+    if (isOwnProfile || profileLoading) return null;
+
+    if (relationStatus === 'friends') {
+      return (
+        <button
+          type="button"
+          onClick={handleUnfriend}
+          disabled={actionBusy}
+          className="shrink-0 rounded-lg border border-[#e4e6eb] px-4 py-2 text-sm font-semibold text-[#1c1e21] transition-colors hover:bg-[#f0f2f5] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Unfriend
+        </button>
+      );
+    }
+
+    if (relationStatus === 'requested') {
+      return (
+        <button
+          type="button"
+          onClick={handleCancelRequest}
+          disabled={actionBusy}
+          className="shrink-0 rounded-lg border border-[#e4e6eb] px-4 py-2 text-sm font-semibold text-[#1c1e21] transition-colors hover:bg-[#f0f2f5] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Cancel request
+        </button>
+      );
+    }
+
+    if (relationStatus === 'incoming') {
+      return (
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={handleDeclineRequest}
+            disabled={actionBusy}
+            className="rounded-lg border border-[#e4e6eb] px-4 py-2 text-sm font-semibold text-[#65676b] transition-colors hover:bg-[#f0f2f5] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Decline
+          </button>
+          <button
+            type="button"
+            onClick={handleAcceptRequest}
+            disabled={actionBusy}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Accept
+          </button>
+        </div>
+      );
+    }
+
+    // relationStatus === 'none'
+    return (
+      <button
+        type="button"
+        onClick={handleAddFriend}
+        disabled={actionBusy}
+        className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        Add friend
+      </button>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[900px] space-y-4 px-4 py-6">
@@ -385,9 +580,6 @@ export default function ProfileSectionView({ user, viewedProfile, displayName, o
               {isOwnProfile ? user?.bio || 'No bio yet' : profileUser?.bio || '—'}
             </p>
             {isOwnProfile ? <p className="mt-1 text-sm text-[#8a8d91]">0 friend(s)</p> : null}
-            {!isOwnProfile ? (
-              <p className="mt-1 text-xs text-[#8a8d91]">Full details load from the API when connected.</p>
-            ) : null}
           </div>
         </div>
 
@@ -399,7 +591,7 @@ export default function ProfileSectionView({ user, viewedProfile, displayName, o
           >
             Edit profile
           </button>
-        ) : null}
+        ) : renderFriendActionButtons()}
       </div>
 
       <div className="rounded-xl border border-[#e4e6eb] bg-white p-5 shadow-[0_2px_4px_rgba(0,0,0,0.06)]">

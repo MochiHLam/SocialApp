@@ -116,6 +116,48 @@ export async function getCurrentUserProfile(userId) {
   return sanitizeUser(user);
 }
 
+export async function getUserProfileById(currentUserId, targetUserId) {
+  const targetId = String(targetUserId);
+  const currentId = String(currentUserId);
+
+  const user = await User.findById(targetId);
+  if (!user || !user.isEmailVerified) {
+    throw new AppError("User not found", 404);
+  }
+
+  const base = sanitizeUser(user);
+
+  if (currentId === targetId) {
+    return { ...base, relationshipStatus: "self", friendRequestId: null, relationshipId: null };
+  }
+
+  const relation = await FriendRequest.findOne({
+    $or: [
+      { requestedById: currentId, receiverId: targetId },
+      { requestedById: targetId, receiverId: currentId },
+    ],
+  }).select("requestedById receiverId status");
+
+  if (!relation) {
+    return { ...base, relationshipStatus: "none", friendRequestId: null, relationshipId: null };
+  }
+
+  const isRequester = String(relation.requestedById) === currentId;
+  const relationshipStatus =
+    relation.status === "accepted"
+      ? "friends"
+      : isRequester
+        ? "requested"
+        : "incoming";
+
+  return {
+    ...base,
+    relationshipStatus,
+    friendRequestId: relation.status !== "accepted" ? String(relation._id) : null,
+    relationshipId: relation.status === "accepted" ? String(relation._id) : null,
+  };
+}
+
 export async function searchUsers(currentUserId, rawQuery, rawLimit = DEFAULT_SEARCH_LIMIT) {
   const query = typeof rawQuery === "string" ? rawQuery.trim() : "";
   const limit = Math.min(

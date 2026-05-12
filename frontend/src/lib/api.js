@@ -71,6 +71,11 @@ export const searchUsers = async ({ q, limit = 20 } = {}) => {
   return response.data;
 };
 
+export const getUserProfile = async ({ userId }) => {
+  const response = await axiosInstance.get(`/users/${userId}`);
+  return response.data;
+};
+
 // --- Friends ---
 
 export const getFriends = async ({ q, limit = 20 } = {}) => {
