@@ -20,13 +20,25 @@ export default function MessageList({
   error = "",
 }) {
   const listRef = useRef(null);
+  const olderScrollPositionRef = useRef(null);
   const [openMenuId, setOpenMenuId] = useState(null);
   const lastMessageId = messages[messages.length - 1]?._id || "";
 
   useEffect(() => {
     if (!listRef.current) return;
+    if (olderScrollPositionRef.current) return;
     listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [lastMessageId]);
+
+  useEffect(() => {
+    const listElement = listRef.current;
+    const previousPosition = olderScrollPositionRef.current;
+    if (!listElement || !previousPosition || isLoadingOlder) return;
+
+    listElement.scrollTop =
+      listElement.scrollHeight - previousPosition.scrollHeight + previousPosition.scrollTop;
+    olderScrollPositionRef.current = null;
+  }, [isLoadingOlder, messages.length]);
 
   useEffect(() => {
     const handleWindowClick = () => {
@@ -38,6 +50,18 @@ export default function MessageList({
       window.removeEventListener("click", handleWindowClick);
     };
   }, []);
+
+  const handleScroll = () => {
+    const listElement = listRef.current;
+    if (!listElement || !hasOlderMessages || isLoadingOlder || !onLoadOlderMessages) return;
+    if (listElement.scrollTop > 80) return;
+
+    olderScrollPositionRef.current = {
+      scrollHeight: listElement.scrollHeight,
+      scrollTop: listElement.scrollTop,
+    };
+    onLoadOlderMessages();
+  };
 
   if (isLoading) {
     return (
@@ -64,17 +88,10 @@ export default function MessageList({
   }
 
   return (
-    <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+    <div ref={listRef} onScroll={handleScroll} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
       {hasOlderMessages && (
-        <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={onLoadOlderMessages}
-            disabled={isLoadingOlder}
-            className="rounded-full border border-[#dadde1] bg-white px-3 py-1.5 text-xs font-semibold text-[#65676b] transition hover:bg-[#f0f2f5] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isLoadingOlder ? "Loading..." : "Load older messages"}
-          </button>
+        <div className="flex h-8 items-center justify-center text-xs font-semibold text-[#65676b]">
+          {isLoadingOlder ? "Loading older messages..." : "Scroll up for older messages"}
         </div>
       )}
       {messages.map((message, index) => {

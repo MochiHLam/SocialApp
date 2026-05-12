@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { Readable } from "node:stream";
 
 import { getCloudinary } from "../config/cloudinary.js";
+import FriendRequest from "../models/FriendRequest.js";
 import Post from "../models/Post.js";
 import { AppError } from "../utils/app-error.js";
 
@@ -21,6 +22,15 @@ function assertObjectId(value, message = "Invalid id") {
   if (!mongoose.Types.ObjectId.isValid(value)) {
     throw new AppError(message, 400);
   }
+}
+
+function buildPairQuery(leftId, rightId) {
+  const left = toIdString(leftId);
+  const right = toIdString(rightId);
+
+  return left < right
+    ? { pairLowId: left, pairHighId: right }
+    : { pairLowId: right, pairHighId: left };
 }
 
 function buildAuthor(user) {
@@ -133,9 +143,46 @@ function findCommentOrReply(post, commentId) {
   return { comment: null, parent: null };
 }
 
+async function getVisiblePostAuthorIds(currentUserId) {
+  const currentId = toIdString(currentUserId);
+  const relations = await FriendRequest.find({
+    status: "accepted",
+    $or: [{ requestedById: currentUserId }, { receiverId: currentUserId }],
+  }).select("requestedById receiverId");
+
+  const authorIds = new Set([currentId]);
+  relations.forEach((relation) => {
+    const requesterId = toIdString(relation.requestedById);
+    const receiverId = toIdString(relation.receiverId);
+    authorIds.add(requesterId === currentId ? receiverId : requesterId);
+  });
+
+  return [...authorIds];
+}
+
+async function assertCanViewPost(currentUserId, post) {
+  const currentId = toIdString(currentUserId);
+  const authorId = toIdString(post?.authorId);
+
+  if (!post) throw new AppError("Post not found", 404);
+  if (authorId === currentId) return;
+
+  const relation = await FriendRequest.findOne({
+    ...buildPairQuery(currentId, authorId),
+    status: "accepted",
+  }).select("_id");
+
+  if (!relation) {
+    throw new AppError("Post not found", 404);
+  }
+}
+
 export async function listPosts(currentUserId, { limit: rawLimit, before } = {}) {
   const limit = parseLimit(rawLimit);
-  const query = {};
+  const visibleAuthorIds = await getVisiblePostAuthorIds(currentUserId);
+  const query = {
+    authorId: { $in: visibleAuthorIds },
+  };
 
   if (before) {
     const beforeDate = new Date(before);
@@ -198,7 +245,7 @@ export async function togglePostLike(currentUserId, postId) {
   assertObjectId(postId, "Invalid post id");
 
   const post = await Post.findById(postId);
-  if (!post) throw new AppError("Post not found", 404);
+  await assertCanViewPost(currentUserId, post);
 
   const currentId = toIdString(currentUserId);
   const alreadyLiked = post.likedBy.some((id) => toIdString(id) === currentId);
@@ -261,7 +308,7 @@ export async function addComment(currentUserId, postId, { text = "" } = {}) {
   if (cleanText.length > 1000) throw new AppError("Comment must be at most 1000 characters long", 400);
 
   const post = await Post.findById(postId);
-  if (!post) throw new AppError("Post not found", 404);
+  await assertCanViewPost(currentUserId, post);
 
   post.comments.push({
     authorId: currentUserId,
@@ -282,7 +329,7 @@ export async function addReply(currentUserId, postId, parentCommentId, { text = 
   if (cleanText.length > 1000) throw new AppError("Reply must be at most 1000 characters long", 400);
 
   const post = await Post.findById(postId);
-  if (!post) throw new AppError("Post not found", 404);
+  await assertCanViewPost(currentUserId, post);
 
   const parentComment = post.comments.id(parentCommentId);
   if (!parentComment) throw new AppError("Comment not found", 404);
@@ -307,7 +354,7 @@ export async function updateComment(currentUserId, postId, commentId, { text = "
   if (cleanText.length > 1000) throw new AppError("Comment must be at most 1000 characters long", 400);
 
   const post = await Post.findById(postId);
-  if (!post) throw new AppError("Post not found", 404);
+  await assertCanViewPost(currentUserId, post);
 
   const { comment } = findCommentOrReply(post, commentId);
   if (!comment) throw new AppError("Comment not found", 404);
@@ -329,7 +376,7 @@ export async function deleteComment(currentUserId, postId, commentId) {
   assertObjectId(commentId, "Invalid comment id");
 
   const post = await Post.findById(postId);
-  if (!post) throw new AppError("Post not found", 404);
+  await assertCanViewPost(currentUserId, post);
 
   const { comment, parent } = findCommentOrReply(post, commentId);
   if (!comment) throw new AppError("Comment not found", 404);
@@ -354,7 +401,7 @@ export async function toggleCommentLike(currentUserId, postId, commentId) {
   assertObjectId(commentId, "Invalid comment id");
 
   const post = await Post.findById(postId);
-  if (!post) throw new AppError("Post not found", 404);
+  await assertCanViewPost(currentUserId, post);
 
   const { comment } = findCommentOrReply(post, commentId);
   if (!comment) throw new AppError("Comment not found", 404);

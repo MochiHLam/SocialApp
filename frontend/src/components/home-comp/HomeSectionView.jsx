@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import FeedComposer from "./feed/FeedComposer.jsx";
 import FeedPostCard from "./feed/FeedPostCard.jsx";
@@ -17,16 +17,23 @@ import {
   updatePost,
 } from "../../lib/api.js";
 
+const POST_PAGE_LIMIT = 20;
+
 export default function HomeSectionView({ displayName, user, subSection, onOpenProfile, onSelectSection }) {
   const [composerText, setComposerText] = useState("");
   const [composerImageUrl, setComposerImageUrl] = useState("");
   const [composerImageFile, setComposerImageFile] = useState(null);
   const [isPosting, setIsPosting] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const [isLoadingMorePosts, setIsLoadingMorePosts] = useState(false);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
+  const [nextPostsCursor, setNextPostsCursor] = useState(null);
   const [feedError, setFeedError] = useState("");
   const [feedPosts, setFeedPosts] = useState([]);
   const composerFileInputRef = useRef(null);
   const composerObjectUrlsRef = useRef(new Set());
+  const feedLoadMoreRef = useRef(null);
+  const activeSubSection = subSection || HOME_SUB_SECTION.home_feed;
 
   useEffect(() => {
     return () => {
@@ -42,8 +49,12 @@ export default function HomeSectionView({ displayName, user, subSection, onOpenP
       setIsLoadingPosts(true);
       setFeedError("");
       try {
-        const data = await getPosts();
-        if (isMounted) setFeedPosts(data?.posts || []);
+        const data = await getPosts({ limit: POST_PAGE_LIMIT });
+        if (isMounted) {
+          setFeedPosts(data?.posts || []);
+          setHasMorePosts(Boolean(data?.pageInfo?.hasMore));
+          setNextPostsCursor(data?.pageInfo?.nextBefore || null);
+        }
       } catch (err) {
         if (isMounted) setFeedError(err.message || "Failed to load posts");
       } finally {
@@ -57,6 +68,52 @@ export default function HomeSectionView({ displayName, user, subSection, onOpenP
       isMounted = false;
     };
   }, []);
+
+  const handleLoadMorePosts = useCallback(async () => {
+    if (!hasMorePosts || !nextPostsCursor || isLoadingMorePosts || isLoadingPosts) return;
+
+    setIsLoadingMorePosts(true);
+    setFeedError("");
+
+    try {
+      const data = await getPosts({
+        limit: POST_PAGE_LIMIT,
+        before: nextPostsCursor,
+      });
+      const nextPosts = data?.posts || [];
+
+      setFeedPosts((prevPosts) => {
+        const existingIds = new Set(prevPosts.map((post) => post.id));
+        return [
+          ...prevPosts,
+          ...nextPosts.filter((post) => !existingIds.has(post.id)),
+        ];
+      });
+      setHasMorePosts(Boolean(data?.pageInfo?.hasMore));
+      setNextPostsCursor(data?.pageInfo?.nextBefore || null);
+    } catch (err) {
+      setFeedError(err.message || "Failed to load more posts");
+    } finally {
+      setIsLoadingMorePosts(false);
+    }
+  }, [hasMorePosts, isLoadingMorePosts, isLoadingPosts, nextPostsCursor]);
+
+  useEffect(() => {
+    const loadMoreElement = feedLoadMoreRef.current;
+    if (!loadMoreElement || activeSubSection !== HOME_SUB_SECTION.home_feed) return undefined;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          handleLoadMorePosts();
+        }
+      },
+      { rootMargin: "600px 0px" },
+    );
+
+    observer.observe(loadMoreElement);
+    return () => observer.disconnect();
+  }, [activeSubSection, handleLoadMorePosts]);
 
   const handleCreatePost = async () => {
     const cleanText = composerText.trim();
@@ -213,7 +270,6 @@ export default function HomeSectionView({ displayName, user, subSection, onOpenP
     return data;
   };
 
-  const activeSubSection = subSection || HOME_SUB_SECTION.home_feed;
   if (activeSubSection !== HOME_SUB_SECTION.home_feed) return null;
 
   return (
@@ -265,6 +321,8 @@ export default function HomeSectionView({ displayName, user, subSection, onOpenP
           />
         ))}
         {isPosting && <PostSkeleton />}
+        {isLoadingMorePosts ? <PostSkeleton /> : null}
+        {hasMorePosts ? <div ref={feedLoadMoreRef} className="h-4" aria-hidden /> : null}
         {!isLoadingPosts && !feedPosts.length && !feedError ? (
           <div className="rounded-lg border border-[#e4e6eb] bg-white px-4 py-8 text-center text-sm font-medium text-[#65676b]">
             No posts yet.

@@ -14,6 +14,7 @@ import { emitChatTyping, getAuthenticatedSocket } from "../../lib/socket.js";
 
 const TYPING_IDLE_MS = 2500;
 const REMOTE_TYPING_TTL_MS = 3500;
+const MESSAGE_PAGE_LIMIT = 20;
 
 function appendMessageOnce(messages, nextMessage) {
   if (!nextMessage?._id) return messages;
@@ -142,7 +143,10 @@ export default function ChatSectionView({ selectedChatThread, onOpenProfile, use
       setError("");
 
       try {
-        const data = await getChatMessages({ conversationId: activeThreadId });
+        const data = await getChatMessages({
+          conversationId: activeThreadId,
+          limit: MESSAGE_PAGE_LIMIT,
+        });
         if (isMounted) {
           const nextMessages = data?.messages || [];
           const nextHasOlderMessages = Boolean(data?.pageInfo?.hasMore);
@@ -180,6 +184,7 @@ export default function ChatSectionView({ selectedChatThread, onOpenProfile, use
     try {
       const data = await getChatMessages({
         conversationId: activeThreadId,
+        limit: MESSAGE_PAGE_LIMIT,
         before: olderCursor,
       });
       const olderMessages = data?.messages || [];
