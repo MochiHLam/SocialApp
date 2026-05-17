@@ -1,0 +1,6 @@
+export const MESSAGE_PAGE_LIMIT = 20;
+export const TYPING_IDLE_MS = 2500;
+export const REMOTE_TYPING_TTL_MS = 3500;
+export const UNREAD_SUMMARIZE_THRESHOLD = 10;
+export const MOCK_SUMMARY_DELAY_MS = 700;
+export const MOCK_SUGGESTIONS_DELAY_MS = 500;

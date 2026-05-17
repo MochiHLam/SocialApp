@@ -2,12 +2,25 @@ import { useEffect, useRef, useState } from "react";
 
 const MAX_TEXTAREA_ROWS = 5;
 
-export default function MessageInput({ onSend, onAttachImage, onTypingChange }) {
+export default function MessageInput({
+  onSend,
+  onAttachImage,
+  onTypingChange,
+  prefillKey = 0,
+  prefillText = "",
+}) {
   const [text, setText] = useState("");
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const attachMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!prefillKey) return;
+    setText(prefillText);
+    onTypingChange?.(prefillText.trim().length > 0);
+    textareaRef.current?.focus();
+  }, [prefillKey, prefillText]);
 
   useEffect(() => {
     if (!textareaRef.current) return;

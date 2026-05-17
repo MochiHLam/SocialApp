@@ -2,12 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAvatarUrl } from "../../lib/avatarUrl.js";
 import { getFriends } from "../../lib/api.js";
-
-function getPresenceMeta(status) {
-  if (status === "online") return { label: "Online", dotClassName: "bg-emerald-500" };
-  if (status === "away") return { label: "Away", dotClassName: "bg-amber-400" };
-  return { label: "Offline", dotClassName: "bg-[#bcc0c4]" };
-}
+import { getPresenceMeta } from "../../lib/chatPresence.js";
 
 /* ─── Member List View ──────────────────────────────────────── */
 function MemberListView({ chat, currentUser, isOwner, onAddMember, onRemoveMember, onViewProfile }) {
