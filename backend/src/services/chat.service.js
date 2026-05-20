@@ -237,7 +237,11 @@ async function ensureAcceptedFriendship(currentUserId, friendId) {
 }
 
 export async function getOrCreateDirectConversation(currentUserId, friendId) {
-  await ensureAcceptedFriendship(currentUserId, friendId);
+  assertObjectId(friendId, "Invalid user id");
+
+  if (toIdString(currentUserId) === toIdString(friendId)) {
+    throw new AppError("You cannot message yourself", 400);
+  }
 
   const friend = await User.findById(friendId).select(USER_SELECT_FIELDS);
   if (!friend) {
