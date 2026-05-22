@@ -28,7 +28,7 @@ export function signGoogleSignupToken(payload) {
 export function verifyAccessToken(token) {
   try {
     return jwt.verify(token, env.jwtSecret);
-  } catch (err) {
+  } catch (_err) {
     throw new AppError("Invalid or expired token", 401);
   }
 }

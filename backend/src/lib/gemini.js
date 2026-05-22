@@ -24,7 +24,7 @@ export async function generateGeminiJson({ system, user }) {
 
     try {
       return JSON.parse(text);
-    } catch (parseError) {
+    } catch (_parseError) {
       console.error("Gemini returned non-JSON:", text);
       throw new AppError("AI returned invalid JSON", 500);
     }
