@@ -1,8 +1,10 @@
-import Brevo from "@getbrevo/brevo";
-const { TransactionalEmailsApi, SendSmtpEmail } = Brevo;
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const SibApiV3Sdk = require("@getbrevo/brevo");
+
 import { env } from "../config/env.js";
 
-const apiInstance = new TransactionalEmailsApi();
+const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 apiInstance.authentications["apiKey"].apiKey = process.env.BREVO_API_KEY;
 
 function buildOtpEmailContent(otpCode, purpose = "signup") {
