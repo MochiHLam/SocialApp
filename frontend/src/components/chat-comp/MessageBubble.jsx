@@ -8,6 +8,7 @@ export default function MessageBubble({
   openMenuId,
   onToggleMenu,
   onDeleteMessage,
+  onSummarizeFrom,
 }) {
   const isCallMessage = message.type === "call";
   const fullTimeLabel = formatFullMessageTime(message.createdAt);
@@ -22,6 +23,19 @@ export default function MessageBubble({
   const hoverTimeClass = `pointer-events-none absolute top-1/2 z-10 hidden -translate-y-1/2 whitespace-nowrap rounded-md bg-[#242526] px-2 py-1 text-[11px] font-semibold text-white shadow-lg peer-hover:block ${
     isMine ? "right-full mr-2" : "left-full ml-2"
   }`;
+
+  const isMenuOpen = openMenuId === message._id;
+
+  // Nút ... nằm kế bên bubble, căn giữa theo chiều dọc
+  const menuButtonClass = isMine
+    ? "absolute top-1/2 -translate-y-1/2 -left-8 flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#65676b] opacity-0 shadow transition hover:bg-[#f0f2f5] group-hover:opacity-100"
+    : "absolute top-1/2 -translate-y-1/2 -right-8 flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#65676b] opacity-0 shadow transition hover:bg-[#f0f2f5] group-hover:opacity-100";
+
+  const dropdownClass = isMine
+    ? "absolute top-1/2 -translate-y-1/2 -left-44 z-10 min-w-[148px] rounded-md border border-[#e4e6eb] bg-white py-1 shadow-lg"
+    : "absolute top-1/2 -translate-y-1/2 -right-44 z-10 min-w-[148px] rounded-md border border-[#e4e6eb] bg-white py-1 shadow-lg";
+
+  const showMenu = !message.isDeleted && !isCallMessage && !message._optimistic;
 
   return (
     <div className={rowClass}>
@@ -60,7 +74,7 @@ export default function MessageBubble({
 
         {fullTimeLabel && <span className={hoverTimeClass}>{fullTimeLabel}</span>}
 
-        {isMine && !message.isDeleted && !isCallMessage && (
+        {showMenu && (
           <>
             <button
               type="button"
@@ -68,7 +82,7 @@ export default function MessageBubble({
                 event.stopPropagation();
                 onToggleMenu(message._id);
               }}
-              className="absolute -bottom-2 -left-8 flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#65676b] opacity-0 shadow transition hover:bg-[#f0f2f5] group-hover:opacity-100"
+              className={menuButtonClass}
               aria-label="Open message actions"
             >
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -76,18 +90,33 @@ export default function MessageBubble({
               </svg>
             </button>
 
-            {openMenuId === message._id && (
+            {isMenuOpen && (
               <div
                 onClick={(event) => event.stopPropagation()}
-                className="absolute -bottom-2 -left-36 z-10 min-w-[120px] rounded-md border border-[#e4e6eb] bg-white py-1 shadow-lg"
+                className={dropdownClass}
               >
+                {/* Summarize from here — hiện với mọi tin nhắn */}
                 <button
                   type="button"
-                  onClick={() => onDeleteMessage(message._id)}
-                  className="w-full px-3 py-2 text-left text-sm text-red-500 transition hover:bg-red-50"
+                  onClick={() => {
+                    onSummarizeFrom?.(message._id);
+                    onToggleMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#1c1e21] transition hover:bg-[#f0f2f5]"
                 >
-                  Delete message
+                  Summarize from here
                 </button>
+
+                {/* Delete — chỉ hiện với tin của mình */}
+                {isMine && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteMessage(message._id)}
+                    className="w-full px-3 py-2 text-left text-sm text-red-500 transition hover:bg-red-50"
+                  >
+                    Delete message
+                  </button>
+                )}
               </div>
             )}
           </>

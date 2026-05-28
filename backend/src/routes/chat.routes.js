@@ -14,7 +14,7 @@ import {
   removeGroupMemberHandler,
   sendImageMessageHandler,
   sendMessageHandler,
-  summarizeUnreadHandler,
+  summarizeMessagesHandler,
   suggestRepliesHandler,
   updateGroupConversationHandler,
 } from "../controllers/chat.controller.js";
@@ -48,7 +48,7 @@ router.patch("/conversations/:conversationId/read", requireAuth, asyncHandler(ma
 router.patch("/conversations/:conversationId/hide", requireAuth, asyncHandler(hideConversationHandler));
 router.delete("/conversations/:conversationId", requireAuth, asyncHandler(deleteGroupConversationHandler));
 router.delete("/messages/:messageId", requireAuth, asyncHandler(deleteMessageHandler));
-router.post("/conversations/:conversationId/ai/summarize-unread", requireAuth, asyncHandler(summarizeUnreadHandler));
+router.post("/conversations/:conversationId/ai/summarize", requireAuth, asyncHandler(summarizeMessagesHandler));
 router.post("/conversations/:conversationId/ai/suggest-replies", requireAuth, asyncHandler(suggestRepliesHandler));
 
 export default router;

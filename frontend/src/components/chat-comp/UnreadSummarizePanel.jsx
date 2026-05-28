@@ -12,8 +12,9 @@ function SummarySkeleton({ lines = 4 }) {
   );
 }
 
-export default function UnreadSummarizePanel({
+export default function SummarizePanel({
   isOpen = false,
+  isFromMessageMode = false,
   unreadCount = 0,
   isLoadingSummary = false,
   summaryBullets = [],
@@ -24,15 +25,17 @@ export default function UnreadSummarizePanel({
   onSuggestResponses,
   onSelectSuggestion,
 }) {
-  const subtitle =
-    unreadCount > 0
+  const title = isFromMessageMode ? "Summary from here" : "Unread summary";
+  const subtitle = isFromMessageMode
+    ? "From selected message to latest"
+    : unreadCount > 0
       ? `${unreadCount} unread messages`
       : "Unread thread recap";
 
   return (
     <ChatModal
       isOpen={isOpen}
-      title="Unread summary"
+      title={title}
       titleId="unread-summarize-title"
       onClose={onClose}
       maxWidthClassName="max-w-2xl"

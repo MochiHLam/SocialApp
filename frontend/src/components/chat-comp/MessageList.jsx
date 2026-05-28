@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { getMessageDayKey } from "../../lib/chatMessageUtils.js";
-import { useFrozenUnreadMarkers } from "../../hooks/useFrozenUnreadMarkers.js";
+import { useChatSummarize } from "../../hooks/useUnreadSummarize.js";
 import { useMessageListScroll } from "../../hooks/useMessageListScroll.js";
-import { useUnreadSummarize } from "../../hooks/useUnreadSummarize.js";
+import { useFrozenUnreadMarkers } from "../../hooks/useFrozenUnreadMarkers.js";
 import { formatMessengerTime } from "../../lib/timeFormat.js";
 import MessageBubble from "./MessageBubble.jsx";
-import UnreadSummarizePanel from "./UnreadSummarizePanel.jsx";
+import SummarizePanel from "./UnreadSummarizePanel.jsx";
 import { SummarizeUnreadButton, UnreadCountBanner } from "./UnreadMessageMarkers.jsx";
 
 function ListStatus({ children, className = "text-[#65676b]" }) {
@@ -38,7 +38,7 @@ export default function MessageList({
     hasOlderMessages,
   });
 
-  const summarize = useUnreadSummarize({ conversationId: threadId, onApplySuggestedReply });
+  const summarize = useChatSummarize({ conversationId: threadId, onApplySuggestedReply, messages });
   const { markers, showUnreadUi } = useFrozenUnreadMarkers({
     messages,
     initialUnreadCount,
@@ -106,6 +106,7 @@ export default function MessageList({
                 onDeleteMessage?.(messageId);
                 setOpenMenuId(null);
               }}
+              onSummarizeFrom={(messageId) => summarize.openFromMessage(messageId)}
             />
 
             {showUnreadUi && message._id === markers.lastId && (
@@ -115,8 +116,9 @@ export default function MessageList({
         );
       })}
 
-      <UnreadSummarizePanel
+      <SummarizePanel
         isOpen={summarize.isOpen}
+        isFromMessageMode={summarize.isFromMessageMode}
         unreadCount={markers?.count ?? initialUnreadCount}
         isLoadingSummary={summarize.isLoadingSummary}
         summaryBullets={summarize.summaryBullets}

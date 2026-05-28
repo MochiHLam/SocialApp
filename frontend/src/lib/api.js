@@ -314,18 +314,18 @@ export const changePassword = async ({ currentPassword, newPassword }) => {
   return response.data;
 };
 
-export const summarizeUnreadChat = async ({ conversationId, endMessageId, maxMessages = 30 }) => {
+export const summarizeChat = async ({ conversationId, endMessageId, startMessageId, maxMessages = 30 }) => {
   const response = await axiosInstance.post(
-    `/chat/conversations/${conversationId}/ai/summarize-unread`,
-    { endMessageId, maxMessages },
+    `/chat/conversations/${conversationId}/ai/summarize`,
+    { endMessageId, startMessageId, maxMessages },
   );
   return response.data;
 };
 
-export const suggestChatReplies = async ({ conversationId, endMessageId, maxMessages = 30 }) => {
+export const suggestChatReplies = async ({ conversationId, endMessageId, startMessageId, maxMessages = 30 }) => {
   const response = await axiosInstance.post(
     `/chat/conversations/${conversationId}/ai/suggest-replies`,
-    { endMessageId, maxMessages },
+    { endMessageId, startMessageId, maxMessages },
   );
   return response.data;
 };

@@ -1,6 +1,6 @@
 import {
-  summarizeUnreadBatch,
-  suggestRepliesForUnreadBatch,
+  summarizeMessageBatch,
+  suggestRepliesForMessageBatch,
 } from "../services/chatAi.service.js";
 import {
   addGroupMember,
@@ -245,15 +245,16 @@ export async function deleteMessageHandler(req, res) {
   });
 }
 
-/** POST /chat/conversations/:conversationId/ai/summarize-unread */
-export async function summarizeUnreadHandler(req, res) {
-  const { endMessageId, maxMessages } = req.body;
+/** POST /chat/conversations/:conversationId/ai/summarize */
+export async function summarizeMessagesHandler(req, res) {
+  const { endMessageId, startMessageId, maxMessages } = req.body;
   if (!endMessageId) {
     return res.status(400).json({ message: "endMessageId is required" });
   }
 
-  const result = await summarizeUnreadBatch(req.user.id, req.params.conversationId, {
+  const result = await summarizeMessageBatch(req.user.id, req.params.conversationId, {
     endMessageId,
+    startMessageId,
     maxMessages,
   });
 
@@ -262,13 +263,14 @@ export async function summarizeUnreadHandler(req, res) {
 
 /** POST /chat/conversations/:conversationId/ai/suggest-replies */
 export async function suggestRepliesHandler(req, res) {
-  const { endMessageId, maxMessages } = req.body;
+  const { endMessageId, startMessageId, maxMessages } = req.body;
   if (!endMessageId) {
     return res.status(400).json({ message: "endMessageId is required" });
   }
 
-  const result = await suggestRepliesForUnreadBatch(req.user.id, req.params.conversationId, {
+  const result = await suggestRepliesForMessageBatch(req.user.id, req.params.conversationId, {
     endMessageId,
+    startMessageId,
     maxMessages,
   });
 

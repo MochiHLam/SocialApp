@@ -49,32 +49,44 @@ function clipText(text, max = MAX_LINE_LENGTH) {
   return `${clean.slice(0, max - 1)}…`;
 }
 
-// Formats a single message into a readable "Name: text" line
+// Formats a single message into a readable "Name: text" line.
+// Returns null for call messages and deleted messages so they can be filtered out.
 function formatMessageLine(message, viewerUserId) {
-  const senderId = String(message.senderId?._id || message.senderId);
-  const senderName = message.senderId?.displayName
-    || (senderId === String(viewerUserId) ? "You" : "Them");
+  // Bỏ qua tin nhắn bị xóa
+  if (message.isDeleted || message.deletedAt) return null;
+  // Bỏ qua tin nhắn cuộc gọi
+  if (message.type === "call") return null;
 
-  if (message.type === "image") return `${senderName}: [image]`;
-  if (message.type === "call") return `${senderName}: [call]`;
+  const senderId = String(message.senderId?._id || message.senderId);
+  const isViewer = senderId === String(viewerUserId);
+  const senderName = isViewer
+    ? "Bạn"
+    : (message.senderId?.displayName || "Họ");
+
+  if (message.type === "image") return `${senderName}: [hình ảnh]`;
 
   const text = clipText(message.text);
-  return `${senderName}: ${text || "[empty]"}`;
+  if (!text) return null;
+  return `${senderName}: ${text}`;
 }
 
-// Converts an array of messages into a plain-text transcript string
+// Converts an array of messages into a plain-text transcript string,
+// skipping calls, deleted messages, and empty lines.
 function formatTranscript(messages, viewerUserId) {
   const ordered = [...messages].reverse();
-  if (!ordered.length) return "(no messages in this batch)";
+  if (!ordered.length) return "(không có tin nhắn)";
 
-  return ordered.map((message) => formatMessageLine(message, viewerUserId)).join("\n");
+  const lines = ordered
+    .map((message) => formatMessageLine(message, viewerUserId))
+    .filter(Boolean);
+
+  return lines.length ? lines.join("\n") : "(không có tin nhắn hợp lệ)";
 }
 
-// Fetches up to N messages up to a cursor message (used for unread batch)
-async function getUnreadBatchMessages(conversationId, endMessageId, maxMessages) {
+// Fetches messages between startMessage and endMessage (inclusive), or up to N messages up to endMessage
+async function getMessagesBatch(conversationId, endMessageId, maxMessages, startMessageId) {
   assertObjectId(endMessageId, "Invalid endMessageId");
 
-  const limit = Math.min(Math.max(Number(maxMessages) || 30, 1), MAX_BATCH_MESSAGES);
   const endMessage = await Message.findOne({
     _id: endMessageId,
     conversationId,
@@ -85,6 +97,35 @@ async function getUnreadBatchMessages(conversationId, endMessageId, maxMessages)
     throw new AppError("Invalid snapshot cursor", 400);
   }
 
+  // Mode: from startMessage to endMessage
+  if (startMessageId) {
+    assertObjectId(startMessageId, "Invalid startMessageId");
+
+    const startMessage = await Message.findOne({
+      _id: startMessageId,
+      conversationId,
+      deletedAt: null,
+    });
+
+    if (!startMessage) {
+      throw new AppError("Invalid start message", 400);
+    }
+
+    return Message.find({
+      conversationId,
+      deletedAt: null,
+      createdAt: {
+        $gte: startMessage.createdAt,
+        $lte: endMessage.createdAt,
+      },
+    })
+      .sort({ createdAt: 1 })
+      .limit(MAX_BATCH_MESSAGES)
+      .populate("senderId", "displayName");
+  }
+
+  // Mode cũ: lấy N tin gần nhất tính từ endMessage
+  const limit = Math.min(Math.max(Number(maxMessages) || 30, 1), MAX_BATCH_MESSAGES);
   return Message.find({
     conversationId,
     deletedAt: null,
@@ -154,20 +195,22 @@ function buildSafeReplies(rawReplies) {
   return unique.slice(0, 3);
 }
 
-// Summarizes a batch of unread messages into 2-5 bullet points using Gemini AI
-export async function summarizeUnreadBatch(viewerUserId, conversationId, { endMessageId, maxMessages = 30 }) {
+// Summarizes a batch of messages into 2-5 bullet points using Gemini AI
+export async function summarizeMessageBatch(viewerUserId, conversationId, { endMessageId, maxMessages = 30, startMessageId }) {
   await assertParticipant(conversationId, viewerUserId);
 
-  const batch = await getUnreadBatchMessages(conversationId, endMessageId, maxMessages);
+  const batch = await getMessagesBatch(conversationId, endMessageId, maxMessages, startMessageId);
   const transcript = formatTranscript(batch, viewerUserId);
 
   const data = await generateGeminiJson({
     system: [
       "You summarize a chat transcript for the reader.",
       "Reply with JSON only: { \"bullets\": string[] }.",
-      "Use 2-5 short bullets in the same language as the chat.",
+      "Use 2-5 short bullets.",
+      "CRITICAL: Detect the language used in the chat transcript and write ALL bullets in that exact same language. If the chat is in Vietnamese, write in Vietnamese. If in English, write in English. Never switch to another language.",
       "Do not invent facts that are not in the transcript.",
       "If the messages discuss something sensitive (personal information, illegal activity, pornography, or anything against the law), describe it in general terms without revealing specifics.",
+      "IMPORTANT: The transcript uses 'Bạn' as the fixed label for the viewer (the person reading this summary). Always refer to the viewer as 'Bạn' in your bullets. Do NOT rephrase 'Bạn' as 'người nói', 'người dùng', 'bạn bè', or any other term. Keep 'Bạn' exactly as written.",
     ].join(" "),
     user: `Transcript:\n${transcript}`,
   });
@@ -187,14 +230,14 @@ export async function summarizeUnreadBatch(viewerUserId, conversationId, { endMe
 }
 
 // Suggests 3 context-aware reply options that match the viewer's writing style using Gemini AI
-export async function suggestRepliesForUnreadBatch(
+export async function suggestRepliesForMessageBatch(
   viewerUserId,
   conversationId,
-  { endMessageId, maxMessages = 30 },
+  { endMessageId, maxMessages = 30, startMessageId },
 ) {
   await assertParticipant(conversationId, viewerUserId);
 
-  const batch = await getUnreadBatchMessages(conversationId, endMessageId, maxMessages);
+  const batch = await getMessagesBatch(conversationId, endMessageId, maxMessages, startMessageId);
   const styleMessages = await getViewerStyleMessages(conversationId, viewerUserId, STYLE_SAMPLE_COUNT);
   const transcript = formatTranscript(batch, viewerUserId);
   const styleSamples = formatStyleSamples(styleMessages);
