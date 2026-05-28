@@ -15,12 +15,14 @@ const SAFE_REPLY_FALLBACKS = [
   "Got it, let me check and reply properly.",
 ];
 
+// Throws 400 if value is not a valid MongoDB ObjectId
 function assertObjectId(value, message = "Invalid id") {
   if (!mongoose.Types.ObjectId.isValid(value)) {
     throw new AppError(message, 400);
   }
 }
 
+// Checks whether a user is a participant of the given conversation
 function isParticipant(conversation, userId) {
   const currentId = String(userId);
   return conversation.participantIds.some(
@@ -28,6 +30,7 @@ function isParticipant(conversation, userId) {
   );
 }
 
+// Fetches conversation and throws 404 if user is not a participant
 async function assertParticipant(conversationId, viewerUserId) {
   assertObjectId(conversationId, "Invalid conversation id");
 
@@ -39,12 +42,14 @@ async function assertParticipant(conversationId, viewerUserId) {
   return conversation;
 }
 
+// Trims and truncates text to a max character length with ellipsis
 function clipText(text, max = MAX_LINE_LENGTH) {
   const clean = (text || "").trim();
   if (clean.length <= max) return clean;
   return `${clean.slice(0, max - 1)}…`;
 }
 
+// Formats a single message into a readable "Name: text" line
 function formatMessageLine(message, viewerUserId) {
   const senderId = String(message.senderId?._id || message.senderId);
   const senderName = message.senderId?.displayName
@@ -57,6 +62,7 @@ function formatMessageLine(message, viewerUserId) {
   return `${senderName}: ${text || "[empty]"}`;
 }
 
+// Converts an array of messages into a plain-text transcript string
 function formatTranscript(messages, viewerUserId) {
   const ordered = [...messages].reverse();
   if (!ordered.length) return "(no messages in this batch)";
@@ -64,6 +70,7 @@ function formatTranscript(messages, viewerUserId) {
   return ordered.map((message) => formatMessageLine(message, viewerUserId)).join("\n");
 }
 
+// Fetches up to N messages up to a cursor message (used for unread batch)
 async function getUnreadBatchMessages(conversationId, endMessageId, maxMessages) {
   assertObjectId(endMessageId, "Invalid endMessageId");
 
@@ -88,6 +95,7 @@ async function getUnreadBatchMessages(conversationId, endMessageId, maxMessages)
     .populate("senderId", "displayName");
 }
 
+// Fetches recent text messages sent by the viewer to use as writing style reference
 async function getViewerStyleMessages(conversationId, viewerUserId, styleLimit = STYLE_SAMPLE_COUNT) {
   const viewerId = new mongoose.Types.ObjectId(viewerUserId);
 
@@ -103,12 +111,14 @@ async function getViewerStyleMessages(conversationId, viewerUserId, styleLimit =
     .select("text createdAt");
 }
 
+// Clips and censors a single style-sample message text
 function sanitizeStyleSample(text) {
   const clipped = clipText(text, 120);
   if (!clipped) return "";
   return containsBadWords(clipped) ? censorText(clipped) : clipped;
 }
 
+// Formats viewer's past messages into a numbered list for AI style context
 function formatStyleSamples(messages) {
   const samples = messages
     .map((message) => sanitizeStyleSample(message.text))
@@ -120,6 +130,7 @@ function formatStyleSamples(messages) {
   return samples.map((line, index) => `${index + 1}. ${line}`).join("\n");
 }
 
+// Censors an AI-generated reply and returns null if it still contains bad words
 function sanitizeAiReply(text) {
   const trimmed = (text || "").trim();
   if (!trimmed) return null;
@@ -128,6 +139,7 @@ function sanitizeAiReply(text) {
   return isCleanText(censored) ? censored : null;
 }
 
+// Sanitizes AI replies, deduplicates them, and pads with fallbacks to ensure 3 results
 function buildSafeReplies(rawReplies) {
   const cleaned = rawReplies
     .map((item) => sanitizeAiReply(item))
@@ -142,6 +154,7 @@ function buildSafeReplies(rawReplies) {
   return unique.slice(0, 3);
 }
 
+// Summarizes a batch of unread messages into 2-5 bullet points using Gemini AI
 export async function summarizeUnreadBatch(viewerUserId, conversationId, { endMessageId, maxMessages = 30 }) {
   await assertParticipant(conversationId, viewerUserId);
 
@@ -173,6 +186,7 @@ export async function summarizeUnreadBatch(viewerUserId, conversationId, { endMe
   };
 }
 
+// Suggests 3 context-aware reply options that match the viewer's writing style using Gemini AI
 export async function suggestRepliesForUnreadBatch(
   viewerUserId,
   conversationId,
