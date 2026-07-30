@@ -2,6 +2,9 @@
 
 Mixi is a social networking platform that allows users to connect, chat in real time, and interact with each other. The project was developed as a practice project to explore modern web development technologies and real-time communication.
 
+User demo: solilyoung5@gmail.com
+password: LOL292002
+
 ## Features
 
 - User Authentication (JWT, Google OAuth)
