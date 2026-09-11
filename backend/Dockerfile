@@ -1,13 +1,13 @@
-FROM node:26-alpine
+FROM node:22-alpine
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
 COPY package*.json ./
 
-RUN npm install --production
+RUN npm ci --omit=dev
 
 COPY . .
 
 EXPOSE 5000
 
-CMD ["node", "src/server.js"]
+CMD ["node","src/server.js"]
